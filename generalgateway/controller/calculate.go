@@ -6,9 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
-	"google.golang.org/grpc/codes"
 
 	"goframe-demo/generalgateway/service"
 )
@@ -42,11 +40,7 @@ func (c *Controller) Calculate(ctx context.Context, req *CalculateReq) (*CodeRes
 
 	reply, err := service.Calculate(ctx, operation, left, right)
 	if err != nil {
-		code := gerror.Code(err).Code()
-		if code == int(codes.InvalidArgument) || code == int(codes.OutOfRange) {
-			return response(ParamError, gerror.Current(err).Error(), nil), nil
-		}
-		return response(InternalError, err.Error(), nil), nil
+		return upstreamError(err), nil
 	}
 
 	return response(Success, "", &CalculateData{Result: reply.GetResult()}), nil

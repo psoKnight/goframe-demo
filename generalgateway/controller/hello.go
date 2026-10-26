@@ -4,9 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
-	"google.golang.org/grpc/codes"
 
 	"goframe-demo/generalgateway/service"
 )
@@ -34,10 +32,7 @@ func (c *Controller) Hello(ctx context.Context, req *HelloReq) (*CodeResponse, e
 
 	reply, err := service.SayHello(ctx, name)
 	if err != nil {
-		if gerror.Code(err).Code() == int(codes.InvalidArgument) {
-			return response(ParamError, gerror.Current(err).Error(), nil), nil
-		}
-		return response(InternalError, err.Error(), nil), nil
+		return upstreamError(err), nil
 	}
 
 	return response(Success, "", &HelloData{Message: reply.GetMessage()}), nil

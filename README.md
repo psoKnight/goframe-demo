@@ -28,6 +28,7 @@ HTTP request
 ├── pbdata/calculatorpb/    # Calculator protobuf 协议与生成代码
 ├── common/healthing/       # HTTP 健康检查处理器
 ├── common/registry/        # 文件注册中心 / Etcd 注册中心初始化
+├── common/resilience/      # GoFrame 限流器和 gRPC 熔断器
 ├── greeter/                # gRPC 业务服务
 ├── calculator/             # 整数计算 gRPC 服务
 ├── generalgateway/         # HTTP API 网关
@@ -140,6 +141,124 @@ registry:
 | `config.yml` | 正式环境，已启用 Etcd，默认占位地址为 `etcd.example.internal:2379` |
 
 正式发布前必须把三个 `config.yml` 中的 Etcd 占位地址替换为实际集群地址。
+
+## 熔断与限流
+
+项目通过 GoFrame 的 `ghttp`、`grpcx` 和 `gcfg` 接入流量治理能力，公共实现位于 `common/resilience`。
+
+```text
+HTTP 请求
+  -> GoFrame HTTP 令牌桶限流
+     -> controller
+     -> service
+     -> gRPC Client 熔断器
+        -> Greeter / Calculator
+           -> 服务实例级 gRPC 限流
+```
+
+### Gateway HTTP 限流
+
+Gateway 使用 `ghttp.Middleware` 接入令牌桶限流，限流维度为：
+
+```text
+客户端 IP + HTTP Method + Request Path
+```
+
+令牌桶状态存放在 GoFrame `gcache` 中，并按 `keyTTL` 自动清理空闲客户端，避免长期运行后无限增长。
+
+配置示例：
+
+```yaml
+resilience:
+  httpRateLimit:
+    enabled: true
+    rate: 100     # 每秒补充 100 个令牌
+    burst: 200    # 最多允许 200 个瞬时突发请求
+    keyTTL: "10m" # 空闲限流 Key 的保留时间
+```
+
+超过限制时返回 HTTP `429`：
+
+```json
+{"error_no":1429,"error_msg":"请求过于频繁，请稍后重试"}
+```
+
+### gRPC 服务端限流
+
+Greeter 和 Calculator 通过 `grpc.ChainUnaryInterceptor` 接入实例级限流。每个副本、每个 gRPC 方法分别维护令牌桶，用于防止绕过 Gateway 的直接调用以及保护单个服务实例。
+
+```yaml
+resilience:
+  grpcRateLimit:
+    enabled: true
+    rate: 200
+    burst: 400
+    keyTTL: "10m"
+```
+
+服务端限流使用标准 gRPC `ResourceExhausted` 错误。Gateway 将其转换为业务错误：
+
+```json
+{"error_no":1429,"error_msg":"请求过于频繁，请稍后重试"}
+```
+
+### 下游熔断
+
+Gateway 为 `greeter` 和 `calculator` 分别创建一个熔断器，并将其作为 `grpcx.Client.ChainUnary` 客户端拦截器。
+
+熔断状态：
+
+```text
+Closed    正常调用，统计失败次数
+Open      达到失败阈值后直接快速失败，不再请求下游
+Half-Open 等待 timeout 后放行少量探测请求
+Closed    探测成功，恢复正常调用
+```
+
+配置示例：
+
+```yaml
+resilience:
+  circuitBreaker:
+    greeter:
+      enabled: true
+      failureThreshold: 5    # 连续失败次数
+      interval: "30s"        # Closed 状态统计窗口
+      timeout: "15s"         # Open 状态持续时间
+      halfOpenMaxRequests: 1 # Half-Open 允许的探测请求数
+    calculator:
+      enabled: true
+      failureThreshold: 5
+      interval: "30s"
+      timeout: "15s"
+      halfOpenMaxRequests: 1
+```
+
+熔断打开时返回：
+
+```json
+{"error_no":1503,"error_msg":"下游服务暂时不可用，请稍后重试"}
+```
+
+`InvalidArgument`、`OutOfRange`、`ResourceExhausted`、`Canceled` 等业务错误或调用方取消不会触发熔断。只有超时、连接失败、`Unavailable` 和服务内部错误等系统故障才会计入失败次数。
+
+### 方案边界
+
+- 当前 HTTP 限流和熔断器都是 Gateway 进程级状态。
+- 多个 Gateway 实例各自拥有独立令牌桶；如果要求整个集群共享一个 QPS 上限，应把令牌桶迁移到 Redis + Lua，或在 Nginx/Envoy/API Gateway 层实现全局限流。
+- Etcd 只用于服务注册发现，不用于保存每次请求的限流计数。
+- gRPC 服务端限流是实例级限制。N 个副本的总配额约为 `N × rate`。
+- 熔断、限流必须与现有 3 秒调用超时一起使用，不应在熔断打开时自动重试。
+
+### 配置位置
+
+三套环境均包含限流和熔断配置：
+
+- `config_local.yml`：本地文件注册中心。
+- `config_test.yml`：Compose + Etcd。
+- `config.yml`：正式环境 + Etcd 集群。
+
+调整阈值后重启对应服务即可生效。生产环境应根据压测结果、实例数量和下游承载能力设置 QPS、burst 和熔断阈值。
 
 ## 构建与发布
 

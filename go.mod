@@ -6,6 +6,8 @@ require (
 	github.com/gogf/gf/contrib/registry/etcd/v2 v2.10.3
 	github.com/gogf/gf/contrib/rpc/grpcx/v2 v2.10.3
 	github.com/gogf/gf/v2 v2.10.3
+	github.com/sony/gobreaker/v2 v2.4.0
+	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 )

@@ -9,6 +9,7 @@ import (
 	"github.com/gogf/gf/contrib/rpc/grpcx/v2"
 	"google.golang.org/grpc"
 
+	"goframe-demo/common/resilience"
 	"goframe-demo/generalgateway/config"
 	"goframe-demo/pbdata/calculatorpb"
 	"goframe-demo/pbdata/greeterpb"
@@ -33,18 +34,39 @@ func Init(ctx context.Context, conf config.RPCClientConfig) error {
 		return err
 	}
 
+	greeterBreaker, err := resilience.NewClientBreaker(ctx, "resilience.circuitBreaker.greeter", "greeter")
+	if err != nil {
+		return fmt.Errorf("init greeter circuit breaker: %w", err)
+	}
+	calculatorBreaker, err := resilience.NewClientBreaker(ctx, "resilience.circuitBreaker.calculator", "calculator")
+	if err != nil {
+		return fmt.Errorf("init calculator circuit breaker: %w", err)
+	}
+
+	greeterOptions := []grpc.DialOption{
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(1024 * 1024 * 20)),
+	}
+	if greeterBreaker != nil {
+		greeterOptions = append(greeterOptions, grpcx.Client.ChainUnary(greeterBreaker.UnaryClientInterceptor()))
+	}
 	greeterConn, err = grpcx.Client.NewGrpcClientConn(
 		greeterTarget,
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(1024*1024*20)),
+		greeterOptions...,
 	)
 	if err != nil {
 		return fmt.Errorf("create greeter connection: %w", err)
 	}
 	GreeterClient = greeterpb.NewGreeterClient(greeterConn)
 
+	calculatorOptions := []grpc.DialOption{
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(1024 * 1024 * 20)),
+	}
+	if calculatorBreaker != nil {
+		calculatorOptions = append(calculatorOptions, grpcx.Client.ChainUnary(calculatorBreaker.UnaryClientInterceptor()))
+	}
 	calculatorConn, err = grpcx.Client.NewGrpcClientConn(
 		calculatorTarget,
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(1024*1024*20)),
+		calculatorOptions...,
 	)
 	if err != nil {
 		_ = greeterConn.Close()

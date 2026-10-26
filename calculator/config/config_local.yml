@@ -1,10 +1,18 @@
+# 本地开发配置：使用 GoFrame 文件注册中心，不依赖 Etcd。
 grpc:
-  name: "calculator"
-  address: ":50053"
-  logStdout: true
-  errorStack: true
-  errorLogEnabled: false
-  accessLogEnabled: false
+  name: "calculator"              # 服务注册名；多实例必须保持一致。
+  address: ":50053"               # gRPC 业务监听地址。
+  logStdout: true                 # 是否将 gRPC 日志输出到终端。
+  errorStack: true                # 错误日志是否附带堆栈。
+  errorLogEnabled: false          # 本地开发不写入错误日志文件。
+  accessLogEnabled: false         # 是否记录每次 gRPC 调用。
 
 healthserver:
-  address: ":50054"
+  address: ":50054"               # HTTP 健康检查端口，路径为 /status.html。
+
+resilience:
+  grpcRateLimit:                  # 当前服务实例、每个 RPC 方法分别限流。
+    enabled: true                 # 是否启用 gRPC 服务端限流。
+    rate: 200                     # 每秒补充的令牌数，即持续 QPS。
+    burst: 400                    # 允许的瞬时突发请求数。
+    keyTTL: "10m"                 # 空闲限流 Key 的缓存保留时间。

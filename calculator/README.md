@@ -20,6 +20,8 @@ go run ./calculator -c=calculator/config/config_local.yml
 
 本地使用 `config_local.yml` 和 GoFrame 文件注册中心；`config_test.yml` 使用 Compose 内的 Etcd；正式 `config.yml` 已启用 Etcd，发布前需修改其中的 Etcd 占位地址。Gateway 按 `grpc.name` 服务名发现多个实例。服务同时注册标准 gRPC Health 服务和 gRPC Reflection。
 
+服务通过 GoFrame `grpcx` 自定义 Unary Interceptor 实现每实例、每 RPC 方法的令牌桶限流，配置位于 `resilience.grpcRateLimit`。
+
 通过网关调用：
 
 ```bash

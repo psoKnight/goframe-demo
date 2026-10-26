@@ -36,6 +36,8 @@ go run ./generalgateway -c=generalgateway/config/config_local.yml
 
 `config_local.yml` 使用文件注册中心，`config_test.yml` 使用 Compose 内的 Etcd，正式 `config.yml` 已启用 Etcd，发布前需修改其中的占位地址。
 
+Gateway 通过 GoFrame `ghttp` 中间件按客户端 IP、HTTP 方法和路径限流，并为每个下游服务配置独立 gRPC 熔断器。配置位于 `resilience.httpRateLimit` 和 `resilience.circuitBreaker`。
+
 调用链：
 
 ```text

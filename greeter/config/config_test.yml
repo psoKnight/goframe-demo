@@ -1,16 +1,24 @@
+# 测试环境配置：使用 Docker Compose 内的 Etcd 进行服务注册发现。
 grpc:
-  name: "greeter"
-  address: ":50051"
-  logStdout: true
-  errorStack: true
-  errorLogEnabled: false
-  accessLogEnabled: false
+  name: "greeter"                 # 服务注册名；扩缩容时所有副本保持一致。
+  address: ":50051"               # 容器内 gRPC 监听地址。
+  logStdout: true                 # 是否将 gRPC 日志输出到容器标准输出。
+  errorStack: true                # 错误日志是否附带堆栈。
+  errorLogEnabled: false          # 是否写入错误日志文件。
+  accessLogEnabled: false         # 是否记录每次 gRPC 调用。
 
 healthserver:
-  address: ":50052"
+  address: ":50052"               # HTTP 健康检查端口。
 
 registry:
-  etcd:
-    address: "etcd:2379"
-    keepaliveTTL: "10s"
-    dialTimeout: "5s"
+  etcd:                           # 共享注册中心，用于多实例服务发现。
+    address: "etcd:2379"          # Compose 网络内的 Etcd 服务地址。
+    keepaliveTTL: "10s"           # 实例 Lease 保活周期，异常退出后自动过期。
+    dialTimeout: "5s"             # 连接 Etcd 的超时时间。
+
+resilience:
+  grpcRateLimit:                  # 每个服务副本、每个 RPC 方法独立限流。
+    enabled: true                 # 是否启用 gRPC 服务端限流。
+    rate: 200                     # 每秒补充的令牌数，即持续 QPS。
+    burst: 400                    # 允许的瞬时突发请求数。
+    keyTTL: "10m"                 # 空闲限流 Key 的缓存保留时间。

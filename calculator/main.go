@@ -6,6 +6,7 @@ import (
 	"github.com/gogf/gf/contrib/rpc/grpcx/v2"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gctx"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -14,6 +15,7 @@ import (
 	"goframe-demo/calculator/service"
 	"goframe-demo/common/healthing"
 	"goframe-demo/common/registry"
+	"goframe-demo/common/resilience"
 	"goframe-demo/pbdata/calculatorpb"
 )
 
@@ -29,7 +31,18 @@ func main() {
 		g.Log().Fatalf(ctx, "init service registry: %v", err)
 	}
 
-	grpcServer := grpcx.Server.New()
+	grpcServerConfig := grpcx.Server.NewConfig()
+	rateLimiter, err := resilience.NewRateLimiter(ctx, "resilience.grpcRateLimit", "calculator-grpc")
+	if err != nil {
+		g.Log().Fatalf(ctx, "init gRPC rate limiter: %v", err)
+	}
+	if rateLimiter != nil {
+		grpcServerConfig.Options = append(
+			grpcServerConfig.Options,
+			grpc.ChainUnaryInterceptor(rateLimiter.UnaryServerInterceptor()),
+		)
+	}
+	grpcServer := grpcx.Server.New(grpcServerConfig)
 	calculatorpb.RegisterCalculatorServer(grpcServer.Server, service.New("Calculator"))
 
 	healthServer := health.NewServer()

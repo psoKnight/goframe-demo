@@ -1,19 +1,40 @@
+# 测试环境配置：使用 Docker Compose 内的 Etcd 进行服务注册发现。
 server:
-  name: "generalgateway"
-  address: ":8080"
-  serverAgent: "GoFrame v2"
-  dumpRouterMap: false
-  openapiPath: "/api.json"
-  swaggerPath: "/swagger"
+  name: "generalgateway"          # HTTP 服务及注册中心实例名。
+  address: ":8080"                # 容器内 HTTP API 监听地址。
+  serverAgent: "GoFrame v2"       # HTTP Server 响应头标识。
+  dumpRouterMap: false            # 启动时是否打印完整路由表。
+  openapiPath: "/api.json"        # OpenAPI 文档地址。
+  swaggerPath: "/swagger"         # Swagger UI 地址。
 
 rpcclient:
-  greeterService: "greeter"
-  greeterAddress: ""
-  calculatorService: "calculator"
-  calculatorAddress: ""
+  greeterService: "greeter"       # 通过 Etcd 服务名发现 Greeter。
+  greeterAddress: ""              # 服务名与直连地址必须且只能配置一个。
+  calculatorService: "calculator" # 通过 Etcd 服务名发现 Calculator。
+  calculatorAddress: ""           # 服务名与直连地址必须且只能配置一个。
 
 registry:
-  etcd:
-    address: "etcd:2379"
-    keepaliveTTL: "10s"
-    dialTimeout: "5s"
+  etcd:                           # 共享注册中心，用于动态扩缩容和发现。
+    address: "etcd:2379"          # Compose 网络内的 Etcd 服务地址。
+    keepaliveTTL: "10s"           # 实例 Lease 保活周期，异常退出后自动过期。
+    dialTimeout: "5s"             # 连接 Etcd 的超时时间。
+
+resilience:
+  httpRateLimit:                  # HTTP 请求限流，维度为 IP + Method + Path。
+    enabled: true                 # 是否启用 Gateway HTTP 限流。
+    rate: 100                     # 每个限流 Key 每秒补充的令牌数。
+    burst: 200                    # 每个限流 Key 允许的瞬时突发请求数。
+    keyTTL: "10m"                 # 空闲限流 Key 的缓存保留时间。
+  circuitBreaker:                 # Gateway 为每个下游服务维护独立熔断器。
+    greeter:                      # Greeter 下游熔断配置。
+      enabled: true               # 是否启用 Greeter 熔断器。
+      failureThreshold: 5         # 连续系统失败多少次后打开熔断器。
+      interval: "30s"             # Closed 状态下的失败统计窗口。
+      timeout: "15s"              # Open 状态持续时间，到期后进入 Half-Open。
+      halfOpenMaxRequests: 1      # Half-Open 状态允许的探测请求数。
+    calculator:                   # Calculator 下游熔断配置。
+      enabled: true               # 是否启用 Calculator 熔断器。
+      failureThreshold: 5         # 连续系统失败多少次后打开熔断器。
+      interval: "30s"             # Closed 状态下的失败统计窗口。
+      timeout: "15s"              # Open 状态持续时间，到期后进入 Half-Open。
+      halfOpenMaxRequests: 1      # Half-Open 状态允许的探测请求数。

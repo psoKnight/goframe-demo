@@ -9,6 +9,7 @@ import (
 
 	"goframe-demo/common/healthing"
 	"goframe-demo/common/registry"
+	"goframe-demo/common/resilience"
 	"goframe-demo/generalgateway/config"
 	"goframe-demo/generalgateway/controller"
 	"goframe-demo/generalgateway/grpc_client"
@@ -35,12 +36,20 @@ func main() {
 	}
 	defer grpc_client.Close()
 
+	rateLimiter, err := resilience.NewRateLimiter(ctx, "resilience.httpRateLimit", "gateway-http")
+	if err != nil {
+		g.Log().Fatalf(ctx, "init HTTP rate limiter: %v", err)
+	}
+
 	server := g.Server("generalgateway")
 	if err = server.SetConfigWithMap(g.Cfg().MustGet(ctx, "server").Map()); err != nil {
 		g.Log().Fatalf(ctx, "configure HTTP server: %v", err)
 	}
 	server.BindHandler("GET:/status.html", healthing.Status)
 	server.Group("/v1", func(group *ghttp.RouterGroup) {
+		if rateLimiter != nil {
+			group.Middleware(rateLimiter.HTTPMiddleware)
+		}
 		group.Middleware(controller.Response)
 		group.Bind(controller.New())
 	})
