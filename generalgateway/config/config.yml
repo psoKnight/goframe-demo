@@ -1,0 +1,20 @@
+server:
+  name: "generalgateway"
+  address: ":8080"
+  serverAgent: "GoFrame v2"
+  dumpRouterMap: false
+  openapiPath: "/api.json"
+  swaggerPath: "/swagger"
+
+rpcclient:
+  greeterService: "greeter"
+  greeterAddress: ""
+  calculatorService: "calculator"
+  calculatorAddress: ""
+
+
+registry:
+  etcd:
+    address: "etcd.example.internal:2379"
+    keepaliveTTL: "10s"
+    dialTimeout: "5s"

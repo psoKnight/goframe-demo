@@ -1,0 +1,5 @@
+**/docker/release/
+*.log
+.idea/
+.vscode/
+.codex-*/

@@ -1,0 +1,16 @@
+grpc:
+  name: "greeter"
+  address: ":50051"
+  logStdout: true
+  errorStack: true
+  errorLogEnabled: false
+  accessLogEnabled: false
+
+healthserver:
+  address: ":50052"
+
+registry:
+  etcd:
+    address: "etcd.example.internal:2379"
+    keepaliveTTL: "10s"
+    dialTimeout: "5s"

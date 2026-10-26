@@ -1,0 +1,10 @@
+grpc:
+  name: "calculator"
+  address: ":50053"
+  logStdout: true
+  errorStack: true
+  errorLogEnabled: false
+  accessLogEnabled: false
+
+healthserver:
+  address: ":50054"

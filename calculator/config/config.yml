@@ -1,0 +1,16 @@
+grpc:
+  name: "calculator"
+  address: ":50053"
+  logStdout: true
+  errorStack: true
+  errorLogEnabled: false
+  accessLogEnabled: false
+
+healthserver:
+  address: ":50054"
+
+registry:
+  etcd:
+    address: "etcd.example.internal:2379"
+    keepaliveTTL: "10s"
+    dialTimeout: "5s"
