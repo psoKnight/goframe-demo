@@ -319,13 +319,75 @@ docker compose logs -f generalgateway
 ```
 
 如需要多个 Gateway，请为每个 Gateway 配置不同的 `server.address`，并在它们前面增加反向代理或负载均衡器。生产环境建议使用高可用 Etcd 集群，而不是 Compose 中用于演示的单节点 Etcd。
-```
-
 ## 修改协议
+
+修改 `.proto` 后重新生成对应的 Go 代码，不要手动编辑 `*.pb.go`：
 
 ```bash
 bash pbdata/greeterpb/pb.sh
 bash pbdata/calculatorpb/pb.sh
+```
+
+### 新增 Calculator RPC
+
+以新增 `Calculator.Subtract` 为例，完整操作步骤如下。
+
+1. 在 `pbdata/calculatorpb/calculator.proto` 的 `service Calculator` 中声明 RPC：
+
+```proto
+service Calculator {
+  rpc Add(BinaryOperationRequest) returns (OperationReply);
+  rpc Multiply(BinaryOperationRequest) returns (OperationReply);
+  rpc Subtract(BinaryOperationRequest) returns (OperationReply);
+}
+```
+
+如果新 RPC 的参数或返回值不同，需要同时新增对应的 `message`。
+
+2. 重新生成 Calculator 的 protobuf 和 gRPC 代码：
+
+```bash
+bash pbdata/calculatorpb/pb.sh
+```
+
+该命令会更新 `calculator.pb.go` 和 `calculator_grpc.pb.go`。
+
+3. 在 `calculator/service/calculator.go` 中实现新方法：
+
+```go
+func (s *Server) Subtract(
+	_ context.Context,
+	req *calculatorpb.BinaryOperationRequest,
+) (*calculatorpb.OperationReply, error) {
+	left, right := req.GetLeft(), req.GetRight()
+
+	if (right > 0 && left < math.MinInt64+right) ||
+		(right < 0 && left > math.MaxInt64+right) {
+		return nil, overflowError()
+	}
+
+	return &calculatorpb.OperationReply{Result: left - right}, nil
+}
+```
+
+`main.go` 已经调用 `RegisterCalculatorServer` 注册整个服务，不需要为每个新增 RPC 单独修改注册代码。
+
+4. 在 `calculator/service/calculator_test.go` 中补充正常值、边界值和溢出测试，然后运行：
+
+```bash
+gofmt -w calculator/service/calculator.go calculator/service/calculator_test.go
+go test ./calculator/... ./generalgateway/...
+```
+
+5. 如果还需要通过 Gateway 的 HTTP 接口调用新 RPC，需要同步修改：
+
+- `generalgateway/service/calculator.go`：增加操作名，并在 `calculate` 中调用新的 gRPC 方法。
+- `generalgateway/controller/calculate.go`：允许新的 `operation`，例如 `subtract`。
+- `generalgateway/service/calculator_test.go` 和 `generalgateway/controller/calculate_test.go`：补充网关分发和参数校验测试。
+
+只供 gRPC 客户端直接调用时，完成前四步即可。全部修改完成后运行：
+
+```bash
 go test ./...
 go vet ./...
 ```
